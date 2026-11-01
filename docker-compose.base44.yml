@@ -1,0 +1,44 @@
+# Base44 sandbox preview environment (added by Base44 for the hosted preview).
+#
+# RE2 is a C++ library; its only runnable UI is the WebAssembly demo in app/.
+# The web service runs the plain Emscripten SDK image, bind-mounts this checkout,
+# and builds + serves the demo from that mounted source (see .base44/preview.sh),
+# so edits are compiled by the running container instead of being baked in.
+
+name: re2-preview
+
+services:
+  web:
+    image: emscripten/emsdk:3.1.74
+    working_dir: /src
+    command: ["bash", "/src/.base44/preview.sh"]
+    environment:
+      - HOME=/root
+      - BASE44_PREVIEW_MODE
+    volumes:
+      - ./:/src
+      # Toolchain caches: Bazel output base, npm cache, and the bundle build dir.
+      - re2_bazel_cache:/root/.cache/bazel
+      - re2_npm_cache:/root/.npm
+      - re2_bundle:/work
+    ports:
+      - "3000:5173"
+    labels:
+      base44.project: re2
+      base44.kind: web
+      base44.port: "3000"
+    restart: on-failure
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - script="$$(curl -fsS http://127.0.0.1:5173/)"; echo "$$script" | grep -q 'type="module"' || { echo "demo page not served"; exit 1; }
+      interval: 15s
+      timeout: 5s
+      # A cold start builds RE2 for wasm with emcc before it can serve anything.
+      start_period: 300s
+      retries: 5
+
+volumes:
+  re2_bazel_cache:
+  re2_npm_cache:
+  re2_bundle:
